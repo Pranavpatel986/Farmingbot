@@ -1,0 +1,39 @@
+import os
+from dotenv import load_dotenv
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_chroma import Chroma
+
+load_dotenv()
+
+def check_database():
+    CHROMA_PATH = "chroma_db"
+    
+    # 1. Initialize Embeddings (Must match ingest_database.py)
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
+
+    # 2. Try to connect to the store
+    try:
+        vector_store = Chroma(
+            collection_name="example_collection",
+            embedding_function=embeddings,
+            persist_directory=CHROMA_PATH,
+        )
+        
+        # 3. Get collection stats
+        count = vector_store._collection.count()
+        
+        if count > 0:
+            print(f"? Success! Your database contains {count} chunks.")
+            # 4. Test a sample retrieval
+            print("Testing retrieval...")
+            results = vector_store.similarity_search("test", k=1)
+            if results:
+                print(f"Sample data found: {results[0].page_content[:50]}...")
+        else:
+            print("? Database is empty. Please run 'python ingest_database.py' first.")
+            
+    except Exception as e:
+        print(f"? Error connecting to database: {e}")
+
+if __name__ == "__main__":
+    check_database()
