@@ -15,17 +15,20 @@ load_dotenv()
 # --- BACKEND SETUP ---
 CHROMA_PATH = "chroma_db"
 COLLECTION_NAME = "example_collection"
+
+# 1. Initialize Gemini Embeddings
 embeddings_model = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001")
 
+# 2. Connect to Chroma (Ensure this folder exists in your GitHub repo)
 vector_store = Chroma(
     collection_name=COLLECTION_NAME,
     embedding_function=embeddings_model,
     persist_directory=CHROMA_PATH,
 )
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
+# 3. Use Gemini 1.5 Flash (Better quota for Free Tier)
+llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0.1)
 
-# Prompt with Citations Instruction
 template = """
 You are "FarmerBot", a scientific agricultural advisor. 
 Use the following context to answer the question. 
@@ -35,19 +38,18 @@ History: {history}
 Question: {question}
 
 Instructions:
-1. If the answer is in the context, provide a detailed response.
+1. Provide a detailed response based on the context.
 2. Mention that the information is sourced from the "Farmer's Handbook".
-3. If you don't know, suggest contacting a local agricultural extension office.
+3. If the answer is not in the context, suggest contacting a local agricultural extension office.
 
 Answer:"""
 
 prompt = ChatPromptTemplate.from_template(template)
 
 def stream_response(message, history):
-    # Retrieve top 4 most relevant chunks
-    retriever = vector_store.as_retriever(search_kwargs={'k': 4})
+    # Retrieve top 2 chunks (Lower 'k' saves memory on Render Free Tier)
+    retriever = vector_store.as_retriever(search_kwargs={'k': 2})
     
-    # RAG Chain
     rag_chain = (
         {
             "context": retriever | (lambda docs: "\n\n".join(d.page_content for d in docs)), 
@@ -66,10 +68,8 @@ def stream_response(message, history):
 
 # --- UI CONSTRUCTION ---
 with gr.Blocks(title="FarmerBot AI Portal") as demo:
-    # Landing Page Background
     gr.HTML(hero_html)
     
-    # Floating Chat Widget
     with gr.Column(elem_id="floating_container"):
         gr.HTML('<div class="widget-header"><span>🌱</span> FarmerBot Assistant</div>')
         gr.ChatInterface(
@@ -78,5 +78,12 @@ with gr.Blocks(title="FarmerBot AI Portal") as demo:
         )
 
 if __name__ == "__main__":
-    # Launch with UTF-8 support for emojis
-    demo.launch(css=custom_css, theme=gr.themes.Soft(primary_hue="emerald"))
+    # RENDER FIX: Bind to 0.0.0.0 and use the PORT environment variable
+    import os
+    server_port = int(os.environ.get("PORT", 10000))
+    
+    demo.launch(
+        server_name="0.0.0.0", 
+        server_port=server_port,
+        share=False  # Must be False for cloud deployments
+    )
